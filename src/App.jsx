@@ -18,6 +18,8 @@ import TeacherCourseDetailPage from '@/pages/teacher/TeacherCourseDetailPage'
 import TeacherQuizBuilderPage from '@/pages/teacher/TeacherQuizBuilderPage'
 import TeacherAssignmentsPage from '@/pages/teacher/TeacherAssignmentsPage'
 import TeacherGradesPage from '@/pages/teacher/TeacherGradesPage'
+import TeacherExamsPage from '@/pages/teacher/TeacherExamsPage'
+import TeacherExamBuilderPage from '@/pages/teacher/TeacherExamBuilderPage'
 import TeacherStudentsPage from '@/pages/teacher/TeacherStudentsPage'
 import TeacherAnnouncementsPage from '@/pages/teacher/TeacherAnnouncementsPage'
 import TeacherProfilePage from '@/pages/teacher/TeacherProfilePage'
@@ -56,6 +58,9 @@ function App() {
                 <Route path="courses/:courseId/quiz-builder" element={<TeacherQuizBuilderPage />} />
                 <Route path="assignments" element={<TeacherAssignmentsPage />} />
                 <Route path="grades" element={<TeacherGradesPage />} />
+                <Route path="exams" element={<TeacherExamsPage />} />
+                <Route path="exams/new" element={<TeacherExamBuilderPage />} />
+                <Route path="exams/:examId/edit" element={<TeacherExamBuilderPage />} />
                 <Route path="students" element={<TeacherStudentsPage />} />
                 <Route path="announcements" element={<TeacherAnnouncementsPage />} />
                 <Route path="profile" element={<TeacherProfilePage />} />

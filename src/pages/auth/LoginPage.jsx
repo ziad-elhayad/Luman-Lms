@@ -25,7 +25,16 @@ export default function LoginPage() {
       const routes = { super_admin: '/admin', teacher: '/teacher', student: '/student' }
       navigate(routes[profile?.role] || '/login')
     } catch (err) {
-      toast({ title: 'Login failed', description: err.message, variant: 'danger' })
+      const isUnconfirmed =
+        err.message?.toLowerCase().includes('email not confirmed') ||
+        err.code === 'email_not_confirmed'
+      toast({
+        title: 'Login failed',
+        description: isUnconfirmed
+          ? 'Email not confirmed. In Supabase: Authentication → Users → open the user → Confirm email. Or run supabase/seeds.sql'
+          : err.message,
+        variant: 'danger',
+      })
     } finally {
       setLoading(false)
     }

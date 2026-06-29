@@ -86,6 +86,13 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     const p = await fetchProfile(data.user.id)
+
+    // Block disabled accounts — sign them out immediately so the session is not kept
+    if (p?.disabled) {
+      await supabase.auth.signOut()
+      throw new Error('Your account has been disabled. Please contact your teacher or administrator.')
+    }
+
     setProfile(p)
     return { user: data.user, profile: p }
   }

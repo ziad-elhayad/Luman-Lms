@@ -21,13 +21,23 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 3. Run the SQL migrations in Supabase SQL Editor (in order):
-   - `supabase/migrations/001_schema.sql`
-   - `supabase/migrations/002_fix_auth_trigger.sql` (if user creation fails)
-   - `supabase/migrations/003_grants.sql` (fixes 403 permission denied)
+   - `supabase/migrations/001_initial.sql`
+   - `supabase/migrations/002_database_logic.sql`
+   - `supabase/migrations/003_security.sql`
 
-### 3. Create test users
+   See `supabase/README.md` for full database documentation.
 
-In Supabase Auth → Users, create each user. For **User Metadata**, use:
+### 3. Auth settings (required for login)
+
+In **Authentication → Providers → Email**, enable:
+- **Enable Email provider**
+- **Enable email signup**
+
+For local testing, turn **off** **Confirm email** so demo users can log in immediately.
+
+### 4. Create test users
+
+In Supabase Auth → Users, create each user. Check **Auto Confirm User**. For **User Metadata**, use:
 
 | Email | Password | User Metadata (JSON) |
 |-------|----------|----------------------|
@@ -38,15 +48,17 @@ In Supabase Auth → Users, create each user. For **User Metadata**, use:
 | student2@lumen.edu | password123 | `{"full_name":"Emma Davis","role":"student","grade":2}` |
 | student3@lumen.edu | password123 | `{"full_name":"Noah Brown","role":"student","grade":1}` |
 
-> If user creation fails with "Database error creating new user", run `supabase/migrations/002_fix_auth_trigger.sql` in the SQL Editor first.
+> Create users with **Auto Confirm User** checked. The auth trigger in `002_database_logic.sql` creates profiles automatically.
 
-Then run `SELECT seed_lumen_data();` in SQL Editor.
+Then run `supabase/seeds.sql` in the SQL Editor.
 
-### 4. Create storage bucket
+If login says **email not confirmed**, confirm users in **Authentication → Users** or re-run the first statement in `seeds.sql`.
+
+### 5. Create storage bucket
 
 In Supabase Storage, create a public bucket named `submissions` for assignment uploads.
 
-### 5. Run dev server
+### 6. Run dev server
 
 ```bash
 npm run dev

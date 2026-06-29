@@ -9,6 +9,7 @@ export const NAV_ITEMS = {
     { label: 'My Courses', path: '/teacher/courses', icon: 'BookOpen' },
     { label: 'Assignments', path: '/teacher/assignments', icon: 'FileText' },
     { label: 'Grades', path: '/teacher/grades', icon: 'GraduationCap' },
+    { label: 'Exams', path: '/teacher/exams', icon: 'ClipboardList' },
     { label: 'Students', path: '/teacher/students', icon: 'Users' },
     { label: 'Announcements', path: '/teacher/announcements', icon: 'Megaphone' },
     { label: 'Profile', path: '/teacher/profile', icon: 'User' },

@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Sun,
   Sparkles,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS } from '@/lib/navigation'
@@ -26,6 +27,7 @@ const ICONS = {
   GraduationCap,
   Megaphone,
   User,
+  ClipboardList,
 }
 
 export function Sidebar({ role, collapsed, onToggle, mobileOpen, onMobileClose }) {
