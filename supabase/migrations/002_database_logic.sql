@@ -312,15 +312,15 @@ BEGIN
   ORDER BY CASE WHEN full_name = 'Mr. James Wilson' THEN 0 ELSE 1 END, created_at LIMIT 1;
 
   SELECT id INTO student1_id FROM public.profiles
-  WHERE full_name IN ('Alex Johnson', 'student1') OR (role = 'student' AND grade = 2)
+  WHERE full_name IN ('Alex Johnson', 'student1') OR role = 'student'
   ORDER BY CASE WHEN full_name = 'Alex Johnson' THEN 0 ELSE 1 END, created_at LIMIT 1;
 
   SELECT id INTO student2_id FROM public.profiles
-  WHERE full_name IN ('Emma Davis', 'student2') OR (role = 'student' AND grade = 2 AND id != COALESCE(student1_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  WHERE full_name IN ('Emma Davis', 'student2') OR (role = 'student' AND id != COALESCE(student1_id, '00000000-0000-0000-0000-000000000000'::uuid))
   ORDER BY CASE WHEN full_name = 'Emma Davis' THEN 0 ELSE 1 END, created_at LIMIT 1;
 
   SELECT id INTO student3_id FROM public.profiles
-  WHERE full_name IN ('Noah Brown', 'student3') OR (role = 'student' AND grade = 1)
+  WHERE full_name IN ('Noah Brown', 'student3') OR (role = 'student' AND id NOT IN (COALESCE(student1_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(student2_id, '00000000-0000-0000-0000-000000000000'::uuid)))
   ORDER BY CASE WHEN full_name = 'Noah Brown' THEN 0 ELSE 1 END, created_at LIMIT 1;
 
   IF admin_id IS NULL THEN
@@ -330,29 +330,25 @@ BEGIN
   UPDATE public.profiles SET full_name = 'Admin User', role = 'super_admin', grade = NULL WHERE id = admin_id;
   IF teacher1_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Dr. Sarah Chen', role = 'teacher', grade = NULL WHERE id = teacher1_id; END IF;
   IF teacher2_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Mr. James Wilson', role = 'teacher', grade = NULL WHERE id = teacher2_id; END IF;
-  IF student1_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Alex Johnson', role = 'student', grade = 2 WHERE id = student1_id; END IF;
-  IF student2_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Emma Davis', role = 'student', grade = 2 WHERE id = student2_id; END IF;
-  IF student3_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Noah Brown', role = 'student', grade = 1 WHERE id = student3_id; END IF;
+  IF student1_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Alex Johnson', role = 'student', grade = NULL, teacher_id = teacher1_id WHERE id = student1_id; END IF;
+  IF student2_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Emma Davis', role = 'student', grade = NULL, teacher_id = teacher1_id WHERE id = student2_id; END IF;
+  IF student3_id IS NOT NULL THEN UPDATE public.profiles SET full_name = 'Noah Brown', role = 'student', grade = NULL, teacher_id = teacher2_id WHERE id = student3_id; END IF;
 
-  INSERT INTO public.courses (id, title, subject, grade, teacher_id, thumbnail, description)
-  VALUES (public.uuid_generate_v4(), 'Physics Grade 2', 'Physics', 2, teacher1_id,
+  INSERT INTO public.courses (id, title, teacher_id, thumbnail, description)
+  VALUES (public.uuid_generate_v4(), 'Introduction to Physics', teacher1_id,
     'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
-    'Introduction to mechanics and thermodynamics for Grade 2 students.')
+    'Introduction to mechanics and thermodynamics.')
   RETURNING id INTO course_physics;
 
-  INSERT INTO public.courses (title, subject, grade, teacher_id, thumbnail, description)
-  VALUES ('Math Grade 2', 'Mathematics', 2, teacher1_id,
+  INSERT INTO public.courses (title, teacher_id, thumbnail, description)
+  VALUES ('Algebra Fundamentals', teacher1_id,
     'https://images.unsplash.com/photo-1635070041408-e5f23d4a3a6a?w=400', 'Algebra, geometry, and calculus fundamentals.')
   RETURNING id INTO course_math;
 
-  INSERT INTO public.courses (title, subject, grade, teacher_id, thumbnail, description)
-  VALUES ('Chemistry Grade 2', 'Chemistry', 2, teacher2_id,
+  INSERT INTO public.courses (title, teacher_id, thumbnail, description)
+  VALUES ('Chemistry Basics', teacher2_id,
     'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400', 'Organic and inorganic chemistry basics.')
   RETURNING id INTO course_chemistry;
-
-  INSERT INTO public.courses (title, subject, grade, teacher_id, thumbnail, description)
-  VALUES ('Math Grade 1', 'Mathematics', 1, teacher2_id,
-    'https://images.unsplash.com/photo-1509228468518-180dd4867304?w=400', 'Basic arithmetic and number theory.');
 
   INSERT INTO public.sessions (course_id, order_no, title, duration_min, video_url, locked)
   VALUES (course_physics, 1, 'Introduction to Motion', 25, 'https://www.youtube.com/embed/6D05L3w9lVM', false)
@@ -391,21 +387,17 @@ BEGIN
 
   IF student1_id IS NOT NULL THEN
     INSERT INTO public.enrollments (student_id, course_id, progress)
-    SELECT student1_id, id, 15 FROM public.courses WHERE grade = 2 ON CONFLICT DO NOTHING;
+    SELECT student1_id, id, 15 FROM public.courses WHERE teacher_id = teacher1_id ON CONFLICT DO NOTHING;
   END IF;
   IF student2_id IS NOT NULL THEN
     INSERT INTO public.enrollments (student_id, course_id, progress)
-    SELECT student2_id, id, 30 FROM public.courses WHERE grade = 2 ON CONFLICT DO NOTHING;
+    SELECT student2_id, id, 30 FROM public.courses WHERE teacher_id = teacher1_id ON CONFLICT DO NOTHING;
+    INSERT INTO public.enrollments (student_id, course_id, progress)
+    VALUES (student2_id, course_chemistry, 20) ON CONFLICT DO NOTHING;
   END IF;
   IF student3_id IS NOT NULL THEN
     INSERT INTO public.enrollments (student_id, course_id, progress)
-    SELECT student3_id, id, 10 FROM public.courses WHERE grade = 1 ON CONFLICT DO NOTHING;
-  END IF;
-
-  IF teacher1_id IS NOT NULL THEN
-    INSERT INTO public.announcements (course_id, teacher_id, title, body) VALUES
-      (course_physics, teacher1_id, 'Midterm Review Session',
-       'Join us this Friday at 3 PM for a comprehensive midterm review. Bring your questions!');
+    SELECT student3_id, id, 10 FROM public.courses WHERE teacher_id = teacher2_id ON CONFLICT DO NOTHING;
   END IF;
 
   RAISE NOTICE 'Seed data inserted successfully!';

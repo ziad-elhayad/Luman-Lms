@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/contexts/ToastContext'
 
 export default function StudentProfilePage() {
@@ -40,7 +39,6 @@ export default function StudentProfilePage() {
             <AvatarImage src={profile?.avatar_url} />
             <AvatarFallback className="text-xl">{initials}</AvatarFallback>
           </Avatar>
-          <Badge className="mt-4">Grade {profile?.grade}</Badge>
         </CardContent>
       </Card>
       <Card>

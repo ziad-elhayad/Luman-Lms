@@ -1,18 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { fetchStudentEnrolledCourseIds } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { SkeletonLoader } from '@/components/shared/SkeletonLoader'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { FileText, Upload } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 
+function sanitizeFileName(name) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function buildSubmissionPath(userId, assignmentId, fileName) {
+  return `${userId}/assignments/${assignmentId}/${Date.now()}-${sanitizeFileName(fileName)}`
+}
+
 export default function StudentAssignmentsPage() {
-  const { user, profile, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [assignments, setAssignments] = useState([])
   const [submissions, setSubmissions] = useState({})
@@ -20,23 +29,17 @@ export default function StudentAssignmentsPage() {
   const [uploading, setUploading] = useState(null)
 
   useEffect(() => {
-    if (authLoading) return
-
-    if (!profile?.grade) {
-      setLoading(false)
-      return
-    }
+    if (authLoading || !user) return
 
     async function load() {
       setLoading(true)
       try {
-        const { data: courses } = await supabase.from('courses').select('id').eq('grade', profile.grade)
-        const courseIds = courses?.map((c) => c.id) || []
+        const courseIds = await fetchStudentEnrolledCourseIds(user.id)
 
         const { data: assigns } = await supabase
           .from('assignments')
           .select('*, course:courses(title)')
-          .in('course_id', courseIds)
+          .in('course_id', courseIds.length ? courseIds : ['00000000-0000-0000-0000-000000000000'])
           .order('due_date')
 
         const { data: subs } = await supabase
@@ -55,15 +58,26 @@ export default function StudentAssignmentsPage() {
     }
 
     load()
-  }, [profile, user, authLoading])
+  }, [user, authLoading])
 
   const handleUpload = async (assignmentId, file) => {
     if (!file) return
     setUploading(assignmentId)
     try {
-      const path = `assignments/${user.id}/${assignmentId}/${file.name}`
-      const { error: uploadError } = await supabase.storage.from('submissions').upload(path, file, { upsert: true })
-      if (uploadError) throw uploadError
+      const path = buildSubmissionPath(user.id, assignmentId, file.name)
+      const { error: uploadError } = await supabase.storage
+        .from('submissions')
+        .upload(path, file, { upsert: false })
+
+      if (uploadError) {
+        const msg = uploadError.message || ''
+        if (msg.toLowerCase().includes('bucket') && msg.toLowerCase().includes('not found')) {
+          throw new Error(
+            'Storage bucket "submissions" is missing. In Supabase go to Storage → New bucket → name it submissions (public), or run supabase/patches/create_submissions_bucket.sql in the SQL Editor.'
+          )
+        }
+        throw uploadError
+      }
 
       const { data: { publicUrl } } = supabase.storage.from('submissions').getPublicUrl(path)
 
@@ -133,7 +147,7 @@ export default function StudentAssignmentsPage() {
           })}
         </div>
       ) : (
-        <EmptyState icon={FileText} title="No assignments" description="You have no assignments at this time." />
+        <EmptyState icon={FileText} title="No assignments" description="You have no assignments in your assigned courses." />
       )}
     </div>
   )

@@ -1,6 +1,17 @@
 import { supabase } from '@/lib/supabase'
 
-export async function fetchStudentCourses(studentGrade) {
+export async function fetchStudentCourses(studentId) {
+  const { data: enrollments, error: enrError } = await supabase
+    .from('enrollments')
+    .select('course_id, progress')
+    .eq('student_id', studentId)
+
+  if (enrError) throw enrError
+  if (!enrollments?.length) return []
+
+  const courseIds = enrollments.map((e) => e.course_id)
+  const progressMap = Object.fromEntries(enrollments.map((e) => [e.course_id, e.progress]))
+
   const { data, error } = await supabase
     .from('courses')
     .select(`
@@ -9,11 +20,54 @@ export async function fetchStudentCourses(studentGrade) {
       sessions(count),
       enrollments(count)
     `)
-    .eq('grade', studentGrade)
+    .in('id', courseIds)
     .order('title')
 
   if (error) throw error
-  return data
+  return (data || []).map((course) => ({
+    ...course,
+    enrollmentProgress: progressMap[course.id] ?? 0,
+  }))
+}
+
+export async function fetchStudentEnrolledCourseIds(studentId) {
+  const { data, error } = await supabase
+    .from('enrollments')
+    .select('course_id')
+    .eq('student_id', studentId)
+
+  if (error) throw error
+  return data?.map((e) => e.course_id) || []
+}
+
+export async function syncStudentEnrollments(studentId, courseIds) {
+  const ids = courseIds || []
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('enrollments')
+    .select('id, course_id')
+    .eq('student_id', studentId)
+
+  if (fetchError) throw fetchError
+
+  const existingIds = existing?.map((e) => e.course_id) || []
+  const toRemove = existing?.filter((e) => !ids.includes(e.course_id)) || []
+  const toAdd = ids.filter((id) => !existingIds.includes(id))
+
+  if (toRemove.length) {
+    const { error } = await supabase
+      .from('enrollments')
+      .delete()
+      .in('id', toRemove.map((e) => e.id))
+    if (error) throw error
+  }
+
+  if (toAdd.length) {
+    const { error } = await supabase
+      .from('enrollments')
+      .insert(toAdd.map((course_id) => ({ student_id: studentId, course_id, progress: 0 })))
+    if (error) throw error
+  }
 }
 
 export async function fetchCourseWithDetails(courseId, studentId) {
@@ -63,7 +117,7 @@ export async function fetchSession(sessionId) {
     .select(`
       *,
       resources(*),
-      course:courses(id, title, grade, teacher:profiles!courses_teacher_id_fkey(full_name))
+      course:courses(id, title, teacher:profiles!courses_teacher_id_fkey(full_name))
     `)
     .eq('id', sessionId)
     .single()
@@ -201,4 +255,98 @@ export async function fetchAdminStats() {
     quizzes: quizzes.count || 0,
     activeUsers: enrollments.count || 0,
   }
+}
+
+export async function fetchCourseExams(courseId) {
+  const { data, error } = await supabase
+    .from('exams')
+    .select('id, title, start_date, end_date, course_id, exam_questions(count)')
+    .eq('course_id', courseId)
+    .order('start_date', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function getExamSubmission(studentId, examId) {
+  const { data, error } = await supabase
+    .from('exam_submissions')
+    .select('*')
+    .eq('student_id', studentId)
+    .eq('exam_id', examId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+export async function fetchExamForStudent(examId, studentId) {
+  const { data: exam, error } = await supabase
+    .from('exams')
+    .select('id, title, start_date, end_date, course_id')
+    .eq('id', examId)
+    .single()
+
+  if (error) throw error
+
+  const { data: questions, error: qErr } = await supabase
+    .from('exam_questions')
+    .select('id, order_no, type, text, image_url, options')
+    .eq('exam_id', examId)
+    .order('order_no')
+
+  if (qErr) throw qErr
+
+  const existing = await getExamSubmission(studentId, examId)
+
+  return { exam, questions: questions || [], submission: existing }
+}
+
+export function gradeExamAnswers(questions, answers) {
+  let mcqTotal = 0
+  let mcqCorrect = 0
+  let hasWritten = false
+
+  questions.forEach((q) => {
+    if (q.type === 'mcq') {
+      mcqTotal += 1
+      if (answers[q.id] === q.correct_index) mcqCorrect += 1
+    } else {
+      hasWritten = true
+    }
+  })
+
+  const mcqScore = mcqTotal > 0 ? Math.round((mcqCorrect / mcqTotal) * 100) : null
+  const allMcq = mcqTotal > 0 && !hasWritten
+  const status = allMcq ? 'auto_graded' : hasWritten ? 'submitted' : 'auto_graded'
+  const finalScore = allMcq ? mcqScore : (mcqTotal > 0 && !hasWritten ? mcqScore : null)
+
+  return { mcqScore, finalScore, status, mcqCorrect, mcqTotal, hasWritten }
+}
+
+export async function submitExamSubmission(studentId, examId, answers) {
+  const { data: questions, error: qErr } = await supabase
+    .from('exam_questions')
+    .select('id, type, correct_index')
+    .eq('exam_id', examId)
+
+  if (qErr) throw qErr
+
+  const { mcqScore, finalScore, status } = gradeExamAnswers(questions || [], answers)
+
+  const { data, error } = await supabase
+    .from('exam_submissions')
+    .insert({
+      exam_id: examId,
+      student_id: studentId,
+      answers,
+      mcq_score: mcqScore,
+      final_score: finalScore,
+      status,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return { submission: data, mcqScore, finalScore, status, questions: questions || [] }
 }

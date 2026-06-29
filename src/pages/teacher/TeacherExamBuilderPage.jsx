@@ -5,6 +5,7 @@ import {
   CheckCircle2, FileText, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { fetchTeacherCourses } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -212,6 +214,8 @@ export default function TeacherExamBuilderPage() {
   const isEdit = Boolean(examId)
 
   const [title, setTitle] = useState('')
+  const [courseId, setCourseId] = useState('')
+  const [courses, setCourses] = useState([])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [questions, setQuestions] = useState([makeQuestion('mcq')])
@@ -219,6 +223,12 @@ export default function TeacherExamBuilderPage() {
   const [loading, setLoading] = useState(isEdit)   // loading existing data
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
+
+  // ── Load teacher courses ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.id) return
+    fetchTeacherCourses(user.id).then((data) => setCourses(data || []))
+  }, [user])
 
   // ── Load existing exam when editing ───────────────────────────────────────
   useEffect(() => {
@@ -243,6 +253,7 @@ export default function TeacherExamBuilderPage() {
       }
 
       setTitle(exam.title)
+      setCourseId(exam.course_id || '')
       setStartDate(toLocalDT(exam.start_date))
       setEndDate(toLocalDT(exam.end_date))
       setQuestions(
@@ -265,6 +276,7 @@ export default function TeacherExamBuilderPage() {
   const validate = () => {
     const e = {}
     if (!title.trim())    e.title = 'Title is required.'
+    if (!courseId)       e.courseId = 'Select a course — enrolled students will see this exam.'
     if (!startDate)       e.startDate = 'Start date is required.'
     if (!endDate)         e.endDate = 'End date is required.'
     if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
@@ -306,7 +318,7 @@ export default function TeacherExamBuilderPage() {
         // Update header
         const { error } = await supabase
           .from('exams')
-          .update({ title: title.trim(), start_date: toISO(startDate), end_date: toISO(endDate) })
+          .update({ title: title.trim(), course_id: courseId, start_date: toISO(startDate), end_date: toISO(endDate) })
           .eq('id', examId)
         if (error) throw error
 
@@ -317,7 +329,13 @@ export default function TeacherExamBuilderPage() {
         // Create exam header
         const { data, error } = await supabase
           .from('exams')
-          .insert({ title: title.trim(), start_date: toISO(startDate), end_date: toISO(endDate), teacher_id: user.id })
+          .insert({
+            title: title.trim(),
+            course_id: courseId,
+            start_date: toISO(startDate),
+            end_date: toISO(endDate),
+            teacher_id: user.id,
+          })
           .select()
           .single()
         if (error) throw error
@@ -419,6 +437,20 @@ export default function TeacherExamBuilderPage() {
               placeholder="e.g. Midterm Exam — Unit 3"
             />
             {errors.title && <p className="text-xs text-danger">{errors.title}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Course</Label>
+            <Select value={courseId || undefined} onValueChange={setCourseId}>
+              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+              <SelectContent>
+                {courses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">All students enrolled in this course can take the exam.</p>
+            {errors.courseId && <p className="text-xs text-danger">{errors.courseId}</p>}
           </div>
 
           {/* Dates */}

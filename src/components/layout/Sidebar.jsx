@@ -6,7 +6,6 @@ import {
   BookOpen,
   FileText,
   GraduationCap,
-  Megaphone,
   User,
   ChevronLeft,
   ChevronRight,
@@ -25,7 +24,6 @@ const ICONS = {
   BookOpen,
   FileText,
   GraduationCap,
-  Megaphone,
   User,
   ClipboardList,
 }

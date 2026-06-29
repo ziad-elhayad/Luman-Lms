@@ -23,12 +23,13 @@ export default function AdminDashboard() {
       const s = await fetchAdminStats()
       setStats(s)
 
-      const { data: courses } = await supabase.from('courses').select('subject, grade')
-      const subjectMap = {}
+      const { data: courses } = await supabase.from('courses').select('title')
+      const titleMap = {}
       courses?.forEach((c) => {
-        subjectMap[c.subject] = (subjectMap[c.subject] || 0) + 1
+        const key = c.title?.slice(0, 20) || 'Untitled'
+        titleMap[key] = (titleMap[key] || 0) + 1
       })
-      setCourseStats(Object.entries(subjectMap).map(([name, count]) => ({ name, count })))
+      setCourseStats(Object.entries(titleMap).map(([name, count]) => ({ name, count })))
 
       const { data: students } = await supabase
         .from('profiles')

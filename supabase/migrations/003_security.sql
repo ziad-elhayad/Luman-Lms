@@ -11,6 +11,22 @@ DO $$ DECLARE r RECORD; BEGIN
   END LOOP;
 END $$;
 
+CREATE OR REPLACE FUNCTION public.student_enrolled_in_course(p_course_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.enrollments e
+    WHERE e.student_id = auth.uid()
+      AND e.course_id = p_course_id
+      AND public.get_user_role() = 'student'
+  );
+$$;
+
+ALTER FUNCTION public.student_enrolled_in_course(uuid) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION public.student_enrolled_in_course(uuid) TO authenticated;
+
 -- ---------------------------------------------------------------------------
 -- profiles
 -- ---------------------------------------------------------------------------
@@ -74,11 +90,11 @@ CREATE POLICY "Super admin full access courses" ON public.courses
 CREATE POLICY "Teachers manage own courses" ON public.courses
   FOR ALL USING (public.get_user_role() = 'teacher' AND teacher_id = auth.uid());
 
-CREATE POLICY "Students see grade-matched courses" ON public.courses
-  FOR SELECT USING (public.get_user_role() = 'student' AND grade = public.get_user_grade());
-
-CREATE POLICY "Teachers view all courses" ON public.courses
-  FOR SELECT USING (public.get_user_role() = 'teacher');
+CREATE POLICY "Students see enrolled courses" ON public.courses
+  FOR SELECT USING (
+    public.get_user_role() = 'student'
+    AND public.student_enrolled_in_course(id)
+  );
 
 -- ---------------------------------------------------------------------------
 -- sessions
@@ -93,10 +109,10 @@ CREATE POLICY "Teachers manage course sessions" ON public.sessions
     AND course_id IN (SELECT id FROM public.courses WHERE teacher_id = auth.uid())
   );
 
-CREATE POLICY "Students view grade-matched sessions" ON public.sessions
+CREATE POLICY "Students view enrolled course sessions" ON public.sessions
   FOR SELECT USING (
     public.get_user_role() = 'student'
-    AND course_id IN (SELECT id FROM public.courses WHERE grade = public.get_user_grade())
+    AND public.student_enrolled_in_course(course_id)
   );
 
 -- ---------------------------------------------------------------------------
@@ -116,13 +132,12 @@ CREATE POLICY "Teachers manage resources" ON public.resources
     )
   );
 
-CREATE POLICY "Students view grade-matched resources" ON public.resources
+CREATE POLICY "Students view enrolled course resources" ON public.resources
   FOR SELECT USING (
     public.get_user_role() = 'student'
     AND session_id IN (
       SELECT s.id FROM public.sessions s
-      JOIN public.courses c ON s.course_id = c.id
-      WHERE c.grade = public.get_user_grade()
+      WHERE public.student_enrolled_in_course(s.course_id)
     )
   );
 
@@ -139,10 +154,10 @@ CREATE POLICY "Teachers manage quizzes" ON public.quizzes
     AND course_id IN (SELECT id FROM public.courses WHERE teacher_id = auth.uid())
   );
 
-CREATE POLICY "Students view grade-matched quizzes" ON public.quizzes
+CREATE POLICY "Students view enrolled course quizzes" ON public.quizzes
   FOR SELECT USING (
     public.get_user_role() = 'student'
-    AND course_id IN (SELECT id FROM public.courses WHERE grade = public.get_user_grade())
+    AND public.student_enrolled_in_course(course_id)
   );
 
 -- ---------------------------------------------------------------------------
@@ -162,13 +177,12 @@ CREATE POLICY "Teachers manage questions" ON public.questions
     )
   );
 
-CREATE POLICY "Students view grade-matched questions" ON public.questions
+CREATE POLICY "Students view enrolled course questions" ON public.questions
   FOR SELECT USING (
     public.get_user_role() = 'student'
     AND quiz_id IN (
       SELECT q.id FROM public.quizzes q
-      JOIN public.courses c ON q.course_id = c.id
-      WHERE c.grade = public.get_user_grade()
+      WHERE public.student_enrolled_in_course(q.course_id)
     )
   );
 
@@ -212,10 +226,10 @@ CREATE POLICY "Teachers manage assignments" ON public.assignments
     AND course_id IN (SELECT id FROM public.courses WHERE teacher_id = auth.uid())
   );
 
-CREATE POLICY "Students view grade-matched assignments" ON public.assignments
+CREATE POLICY "Students view enrolled course assignments" ON public.assignments
   FOR SELECT USING (
     public.get_user_role() = 'student'
-    AND course_id IN (SELECT id FROM public.courses WHERE grade = public.get_user_grade())
+    AND public.student_enrolled_in_course(course_id)
   );
 
 -- ---------------------------------------------------------------------------
@@ -257,22 +271,6 @@ CREATE POLICY "Teachers update own course submissions" ON public.submissions
 
 CREATE POLICY "Students manage own submissions" ON public.submissions
   FOR ALL USING (student_id = auth.uid());
-
--- ---------------------------------------------------------------------------
--- announcements
--- ---------------------------------------------------------------------------
-
-CREATE POLICY "Super admin full access announcements" ON public.announcements
-  FOR ALL USING (public.get_user_role() = 'super_admin');
-
-CREATE POLICY "Teachers manage announcements" ON public.announcements
-  FOR ALL USING (public.get_user_role() = 'teacher' AND teacher_id = auth.uid());
-
-CREATE POLICY "Students view grade-matched announcements" ON public.announcements
-  FOR SELECT USING (
-    public.get_user_role() = 'student'
-    AND course_id IN (SELECT id FROM public.courses WHERE grade = public.get_user_grade())
-  );
 
 -- ---------------------------------------------------------------------------
 -- session_progress
@@ -317,6 +315,24 @@ CREATE POLICY "Students read own submission files" ON storage.objects
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
+CREATE POLICY "Students update own submission files" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'submissions'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'submissions'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "Students delete own submission files" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'submissions'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
 CREATE POLICY "Teachers read submission files for their courses" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'submissions' AND public.get_user_role() = 'teacher');
@@ -325,6 +341,13 @@ CREATE POLICY "Super admin full access submissions bucket" ON storage.objects
   FOR ALL TO authenticated
   USING (bucket_id = 'submissions' AND public.get_user_role() = 'super_admin')
   WITH CHECK (bucket_id = 'submissions' AND public.get_user_role() = 'super_admin');
+
+-- Storage bucket (safe to re-run)
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('submissions', 'submissions', true, 52428800)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit;
 
 -- ---------------------------------------------------------------------------
 -- Table grants (RLS still enforced)
@@ -344,5 +367,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.questions TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.enrollments TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.assignments TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.submissions TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.announcements TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.session_progress TO authenticated;

@@ -21,7 +21,6 @@ import TeacherGradesPage from '@/pages/teacher/TeacherGradesPage'
 import TeacherExamsPage from '@/pages/teacher/TeacherExamsPage'
 import TeacherExamBuilderPage from '@/pages/teacher/TeacherExamBuilderPage'
 import TeacherStudentsPage from '@/pages/teacher/TeacherStudentsPage'
-import TeacherAnnouncementsPage from '@/pages/teacher/TeacherAnnouncementsPage'
 import TeacherProfilePage from '@/pages/teacher/TeacherProfilePage'
 import TeacherSettingsPage from '@/pages/teacher/TeacherSettingsPage'
 
@@ -31,6 +30,8 @@ import StudentCourseDetailPage from '@/pages/student/StudentCourseDetailPage'
 import StudentLessonPage from '@/pages/student/StudentLessonPage'
 import StudentQuizPage from '@/pages/student/StudentQuizPage'
 import StudentQuizResultPage from '@/pages/student/StudentQuizResultPage'
+import StudentExamPage from '@/pages/student/StudentExamPage'
+import StudentExamResultPage from '@/pages/student/StudentExamResultPage'
 import StudentAssignmentsPage from '@/pages/student/StudentAssignmentsPage'
 import StudentProfilePage from '@/pages/student/StudentProfilePage'
 import StudentSettingsPage from '@/pages/student/StudentSettingsPage'
@@ -62,7 +63,6 @@ function App() {
                 <Route path="exams/new" element={<TeacherExamBuilderPage />} />
                 <Route path="exams/:examId/edit" element={<TeacherExamBuilderPage />} />
                 <Route path="students" element={<TeacherStudentsPage />} />
-                <Route path="announcements" element={<TeacherAnnouncementsPage />} />
                 <Route path="profile" element={<TeacherProfilePage />} />
                 <Route path="settings" element={<TeacherSettingsPage />} />
               </Route>
@@ -74,6 +74,8 @@ function App() {
                 <Route path="courses/:courseId/lesson/:sessionId" element={<StudentLessonPage />} />
                 <Route path="courses/:courseId/quiz/:quizId" element={<StudentQuizPage />} />
                 <Route path="courses/:courseId/quiz/:quizId/result" element={<StudentQuizResultPage />} />
+                <Route path="courses/:courseId/exam/:examId" element={<StudentExamPage />} />
+                <Route path="courses/:courseId/exam/:examId/result" element={<StudentExamResultPage />} />
                 <Route path="assignments" element={<StudentAssignmentsPage />} />
                 <Route path="profile" element={<StudentProfilePage />} />
                 <Route path="settings" element={<StudentSettingsPage />} />

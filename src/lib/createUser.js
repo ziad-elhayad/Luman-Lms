@@ -73,7 +73,7 @@ export async function createUserAccount({ email, password, role = 'student', pro
 /**
  * Create a student account
  */
-export async function createStudent({ email, password, firstName, lastName, fullName, phone, grade, subjects, teacherId }) {
+export async function createStudent({ email, password, firstName, lastName, fullName, phone, teacherId }) {
   return createUserAccount({
     email,
     password,
@@ -83,8 +83,6 @@ export async function createStudent({ email, password, firstName, lastName, full
       last_name: lastName,
       full_name: fullName || `${firstName} ${lastName}`.trim(),
       phone,
-      grade,
-      subjects,
       teacher_id: teacherId,
     },
   })

@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 CREATE TABLE IF NOT EXISTS public.courses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  grade INTEGER NOT NULL,
+  subject TEXT DEFAULT '',
+  grade INTEGER,
   teacher_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   thumbnail TEXT,
   description TEXT,
@@ -179,14 +179,6 @@ ALTER TABLE public.submissions ADD CONSTRAINT submissions_target_xor
     (quiz_id IS NOT NULL AND assignment_id IS NULL) OR
     (quiz_id IS NULL AND assignment_id IS NOT NULL)
   ) NOT VALID;
-
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_student_grade_check;
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_student_grade_check
-  CHECK (role <> 'student' OR grade IS NOT NULL) NOT VALID;
-
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_non_student_grade_null;
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_non_student_grade_null
-  CHECK (role = 'student' OR grade IS NULL) NOT VALID;
 
 -- ---------------------------------------------------------------------------
 -- Enable RLS (policies applied in 003_security.sql)

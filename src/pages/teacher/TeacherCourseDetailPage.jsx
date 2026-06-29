@@ -14,11 +14,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatDuration } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function TeacherCourseDetailPage() {
   const { courseId } = useParams()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [course, setCourse] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sessionDialog, setSessionDialog] = useState(false)
@@ -32,16 +34,19 @@ export default function TeacherCourseDetailPage() {
       .from('courses')
       .select('*, sessions(*), quizzes(*), assignments(*)')
       .eq('id', courseId)
+      .eq('teacher_id', user.id)
       .single()
-    if (error) toast({ title: 'Error', description: error.message, variant: 'danger' })
-    else {
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'danger' })
+      navigate('/teacher/courses')
+    } else {
       data.sessions?.sort((a, b) => a.order_no - b.order_no)
       setCourse(data)
     }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [courseId])
+  useEffect(() => { if (user?.id) load() }, [courseId, user])
 
   const openSessionDialog = (session = null) => {
     if (session) {
@@ -90,9 +95,8 @@ export default function TeacherCourseDetailPage() {
       </Button>
 
       <div>
-        <Badge className="mb-2">Grade {course.grade}</Badge>
         <h1 className="text-2xl font-bold">{course.title}</h1>
-        <p className="text-muted-foreground">{course.subject}</p>
+        {course.description && <p className="text-muted-foreground">{course.description}</p>}
       </div>
 
       <section>

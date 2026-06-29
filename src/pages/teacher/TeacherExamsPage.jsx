@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Pencil, Trash2, Calendar, Clock } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 const PAGE_SIZE = 10
 
@@ -32,6 +33,7 @@ function examStatus(exam) {
 export default function TeacherExamsPage() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const [exams, setExams] = useState([])
   const [loading, setLoading] = useState(true)
@@ -41,17 +43,19 @@ export default function TeacherExamsPage() {
   const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
+    if (!user?.id) return
     setLoading(true)
     const { data, error } = await supabase
       .from('exams')
-      .select('*, exam_questions(count)')
+      .select('*, exam_questions(count), course:courses(title)')
+      .eq('teacher_id', user.id)
       .order('start_date', { ascending: false })
     if (error) toast({ title: 'Error loading exams', description: error.message, variant: 'danger' })
     setExams(data || [])
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [user])
 
   const filtered = exams.filter((e) =>
     e.title?.toLowerCase().includes(search.toLowerCase())
@@ -78,6 +82,10 @@ export default function TeacherExamsPage() {
     {
       key: 'title', label: 'Title',
       render: (r) => <span className="font-medium">{r.title}</span>,
+    },
+    {
+      key: 'course', label: 'Course',
+      render: (r) => r.course?.title || <span className="text-muted-foreground">—</span>,
     },
     {
       key: 'start', label: 'Start',

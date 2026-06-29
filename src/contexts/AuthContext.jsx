@@ -38,16 +38,6 @@ export function AuthProvider({ children }) {
       needsUpdate = true
     }
 
-    // Sync grade for students
-    if (data.role === 'student' && data.grade == null && meta.grade != null) {
-      const grade = typeof meta.grade === 'number' ? meta.grade : parseInt(meta.grade, 10)
-      if (!Number.isNaN(grade)) {
-        updates.grade = grade
-        data.grade = grade
-        needsUpdate = true
-      }
-    }
-
     if (needsUpdate) {
       await supabase.from('profiles').update(updates).eq('id', userId)
     }

@@ -15,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { BookOpen } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 
@@ -27,7 +26,7 @@ export default function TeacherCoursesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteId, setDeleteId] = useState(null)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ title: '', subject: '', grade: '2', description: '', thumbnail: '' })
+  const [form, setForm] = useState({ title: '', description: '' })
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
@@ -45,7 +44,7 @@ export default function TeacherCoursesPage() {
 
   const openCreate = () => {
     setEditing(null)
-    setForm({ title: '', subject: '', grade: '2', description: '', thumbnail: '' })
+    setForm({ title: '', description: '' })
     setDialogOpen(true)
   }
 
@@ -53,18 +52,23 @@ export default function TeacherCoursesPage() {
     setEditing(course)
     setForm({
       title: course.title,
-      subject: course.subject,
-      grade: String(course.grade),
       description: course.description || '',
-      thumbnail: course.thumbnail || '',
     })
     setDialogOpen(true)
   }
 
   const handleSave = async () => {
+    if (!form.title.trim()) {
+      toast({ title: 'Title required', description: 'Enter a course title.', variant: 'danger' })
+      return
+    }
     setSaving(true)
     try {
-      const payload = { ...form, grade: parseInt(form.grade), teacher_id: user.id }
+      const payload = {
+        title: form.title.trim(),
+        description: form.description?.trim() || null,
+        teacher_id: user.id,
+      }
       if (editing) {
         const { error } = await supabase.from('courses').update(payload).eq('id', editing.id)
         if (error) throw error
@@ -100,7 +104,7 @@ export default function TeacherCoursesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">My Courses</h2>
-          <p className="text-muted-foreground">Create and manage your courses</p>
+          <p className="text-muted-foreground">Create courses, then assign them when you add students</p>
         </div>
         <Button onClick={openCreate}><Plus className="h-4 w-4" /> New Course</Button>
       </div>
@@ -148,21 +152,8 @@ export default function TeacherCoursesPage() {
             <DialogTitle>{editing ? 'Edit Course' : 'New Course'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Subject</Label><Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} /></div>
-            <div className="space-y-2">
-              <Label>Grade</Label>
-              <Select value={form.grade} onValueChange={(v) => setForm({ ...form, grade: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((g) => (
-                    <SelectItem key={g} value={String(g)}>Grade {g}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2"><Label>Thumbnail URL</Label><Input value={form.thumbnail} onChange={(e) => setForm({ ...form, thumbnail: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Introduction to Physics" /></div>
+            <div className="space-y-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What will students learn?" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>

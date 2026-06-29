@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { BookOpen, FileText, TrendingUp } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { fetchStudentCourses } from '@/lib/api'
 import { CourseCard } from '@/components/shared/CourseCard'
 import { StatCard } from '@/components/shared/StatCard'
 import { SkeletonLoader } from '@/components/shared/SkeletonLoader'
@@ -18,42 +19,18 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (authLoading) return
-
-    if (!user || !profile) {
-      setLoading(false)
-      return
-    }
-
-    if (!profile.grade) {
-      setCourses([])
-      setAssignments([])
-      setLoading(false)
+    if (authLoading || !user) {
+      if (!authLoading) setLoading(false)
       return
     }
 
     async function load() {
       setLoading(true)
       try {
-        const { data: courseData } = await supabase
-          .from('courses')
-          .select(`
-            *,
-            teacher:profiles!courses_teacher_id_fkey(full_name),
-            sessions(count),
-            enrollments!inner(progress)
-          `)
-          .eq('grade', profile.grade)
-          .eq('enrollments.student_id', user.id)
-          .limit(4)
+        const enrolledCourses = await fetchStudentCourses(user.id)
+        setCourses(enrolledCourses.slice(0, 4))
 
-        const { data: gradeCourses } = await supabase
-          .from('courses')
-          .select('id')
-          .eq('grade', profile.grade)
-
-        const courseIds = gradeCourses?.map((c) => c.id) || []
-
+        const courseIds = enrolledCourses.map((c) => c.id)
         let assignmentData = []
         if (courseIds.length) {
           const { data } = await supabase
@@ -66,7 +43,6 @@ export default function StudentDashboard() {
           assignmentData = data || []
         }
 
-        setCourses(courseData || [])
         setAssignments(assignmentData)
       } finally {
         setLoading(false)
@@ -74,22 +50,12 @@ export default function StudentDashboard() {
     }
 
     load()
-  }, [profile, user, authLoading])
+  }, [user, authLoading])
 
   if (authLoading || loading) return <SkeletonLoader type="stat" count={3} />
 
-  if (!profile?.grade) {
-    return (
-      <EmptyState
-        icon={BookOpen}
-        title="Grade not set"
-        description="Your student profile is missing a grade. Ask your teacher or admin to assign one, or run the seed script in Supabase."
-      />
-    )
-  }
-
   const avgProgress = courses.length
-    ? Math.round(courses.reduce((sum, c) => sum + (c.enrollments?.[0]?.progress || 0), 0) / courses.length)
+    ? Math.round(courses.reduce((sum, c) => sum + (c.enrollmentProgress || 0), 0) / courses.length)
     : 0
 
   return (
@@ -118,16 +84,18 @@ export default function StudentDashboard() {
                 course={course}
                 to={`/student/courses/${course.id}`}
                 teacherName={course.teacher?.full_name}
-                studentCount={course.enrollments?.length}
+                studentCount={course.enrollments?.[0]?.count}
                 sessionCount={course.sessions?.[0]?.count}
-                progress={course.enrollments?.[0]?.progress || 0}
+                progress={course.enrollmentProgress || 0}
               />
             ))}
           </div>
         ) : (
-          <p className="text-muted-foreground">
-            No enrolled courses yet for Grade {profile.grade}. Run <code className="text-sm">SELECT seed_lumen_data();</code> in Supabase if you haven&apos;t seeded the database.
-          </p>
+          <EmptyState
+            icon={BookOpen}
+            title="No courses yet"
+            description="Your teacher will assign courses to you. Check back soon."
+          />
         )}
       </section>
 

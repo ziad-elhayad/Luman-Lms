@@ -22,21 +22,30 @@ export default function TeacherDashboard() {
 
       const courseIds = courses?.map((c) => c.id) || []
 
+      const { data: assignments } = await supabase
+        .from('assignments')
+        .select('id')
+        .in('course_id', courseIds.length ? courseIds : ['00000000-0000-0000-0000-000000000000'])
+
+      const assignmentIds = assignments?.map((a) => a.id) || []
+
       const { count: studentCount } = await supabase
-        .from('enrollments')
+        .from('profiles')
         .select('id', { count: 'exact' })
-        .in('course_id', courseIds)
+        .eq('role', 'student')
+        .eq('teacher_id', user.id)
 
       const { count: pendingCount } = await supabase
         .from('submissions')
         .select('id', { count: 'exact' })
         .eq('status', 'submitted')
-        .not('assignment_id', 'is', null)
+        .in('assignment_id', assignmentIds.length ? assignmentIds : ['00000000-0000-0000-0000-000000000000'])
 
       const { data: subs } = await supabase
         .from('submissions')
         .select('*, student:profiles(full_name)')
         .eq('status', 'submitted')
+        .in('assignment_id', assignmentIds.length ? assignmentIds : ['00000000-0000-0000-0000-000000000000'])
         .order('created_at', { ascending: false })
         .limit(5)
 
@@ -58,7 +67,7 @@ export default function TeacherDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard title="My Courses" value={stats.courses} icon={BookOpen} />
-        <StatCard title="Total Students" value={stats.students} icon={Users} />
+        <StatCard title="My Students" value={stats.students} icon={Users} />
         <StatCard title="Grading Queue" value={stats.pending} icon={ClipboardList} />
       </div>
 
