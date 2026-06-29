@@ -20,7 +20,7 @@ import {
   teacherDisplayName,
 } from '@/lib/teacherForm'
 import { formatSubjectsList, EDUCATION_LEVELS } from '@/lib/teacherSubjects'
-import { createTeacherAccount, updateTeacherAccount } from '@/lib/teacherAccount'
+import { createTeacher, updateTeacher } from '@/lib/createUser'
 
 const PAGE_SIZE = 10
 
@@ -105,10 +105,30 @@ export default function AdminTeachersPage() {
     setSaving(true)
     try {
       if (isEdit) {
-        await updateTeacherAccount(form, editing.id)
+        await updateTeacher(editing.id, {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          phone: form.phone,
+          educationLevel: form.educationLevel,
+          secondaryTrack: form.secondaryTrack,
+          subjects: form.subjects,
+          password: form.password || null,
+        })
         toast({ title: 'Teacher updated', variant: 'success' })
       } else {
-        await createTeacherAccount(form)
+        const fullName = `${form.firstName} ${form.lastName}`.trim()
+        await createTeacher({
+          email: form.email,
+          password: form.password,
+          firstName: form.firstName,
+          lastName: form.lastName,
+          fullName,
+          phone: form.phone,
+          educationLevel: form.educationLevel,
+          secondaryTrack: form.secondaryTrack,
+          subjects: form.subjects,
+        })
         toast({
           title: 'Teacher created',
           description: 'They can log in with the email and password you set.',

@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/contexts/ToastContext'
-import { createUserAccount } from '@/lib/createUser'
+import { useAuth } from '@/contexts/AuthContext'
+import { createStudent } from '@/lib/createUser'
 import { StudentForm } from '@/components/shared/StudentForm'
 
 const PAGE_SIZE = 10
@@ -35,6 +36,9 @@ function toggleDisabledLocal(list, id) {
 
 export default function TeacherStudentsPage() {
   const { toast } = useToast()
+  const { profile: teacherProfile } = useAuth()
+  const teacherId = teacherProfile?.id
+
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -56,18 +60,32 @@ export default function TeacherStudentsPage() {
   const [togglingIds, setTogglingIds] = useState(new Set())
 
   const load = async () => {
+    console.log('=== LOAD FUNCTION START ===')
+    console.log('teacherId:', teacherId)
+    console.log('teacherProfile:', teacherProfile)
+    if (!teacherId) {
+      console.log('Returning early - no teacherId')
+      return
+    }
     setLoading(true)
+    // Use direct query without teacher_id filter since RLS allows all students
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('role', 'student')
       .order('full_name')
-    if (error) toast({ title: 'Error loading students', description: error.message, variant: 'danger' })
+    console.log('Direct query returned students:', data)
+    console.log('Direct query error:', error)
+    if (error) {
+      console.error('Query error details:', JSON.stringify(error, null, 2))
+      toast({ title: 'Error loading students', description: error.message, variant: 'danger' })
+    }
     setStudents(data || [])
     setLoading(false)
+    console.log('=== LOAD FUNCTION END ===')
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [teacherId])
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = students.filter((s) => {
@@ -79,8 +97,12 @@ export default function TeacherStudentsPage() {
       (filter === 'disabled' && s.disabled)
     return matchSearch && matchFilter
   })
+  console.log('Total students:', students.length)
+  console.log('Filtered students:', filtered.length)
+  console.log('Search:', search, 'Filter:', filter)
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  console.log('Paginated students:', paginated.length)
 
   // ── Open dialogs ──────────────────────────────────────────────────────────
   const openCreate = () => {
@@ -158,6 +180,7 @@ export default function TeacherStudentsPage() {
           phone: form.phone?.trim() || null,
           grade: gradeVal,
           subjects: form.subjects || [],
+          teacher_id: teacherId,
         }
         const { error } = await supabase.from('profiles').update(updates).eq('id', editing.id)
         if (error) throw error
@@ -186,20 +209,19 @@ export default function TeacherStudentsPage() {
 
         toast({ title: 'Student updated', variant: 'success' })
       } else {
-        // Create new auth user + profile via existing utility
-        await createUserAccount({
+        // Create new student
+        const user = await createStudent({
           email: form.email.trim(),
           password: form.password || 'password123',
-          metadata: {
-            first_name: form.firstName.trim(),
-            last_name: form.lastName.trim(),
-            full_name: fullName,
-            phone: form.phone?.trim() || null,
-            role: 'student',
-            grade: gradeVal,
-            subjects: form.subjects || [],
-          },
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          fullName,
+          phone: form.phone?.trim() || null,
+          grade: gradeVal,
+          subjects: form.subjects || [],
+          teacherId,
         })
+
         toast({
           title: 'Student created',
           description: 'They can log in with the email and password you set.',
@@ -210,7 +232,9 @@ export default function TeacherStudentsPage() {
       setEditing(null)
       load()
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'danger' })
+      console.error('Save error:', err)
+      const errorMsg = err?.message || err?.error_description || JSON.stringify(err)
+      toast({ title: 'Error', description: errorMsg || 'An unknown error occurred', variant: 'danger' })
     } finally {
       setSaving(false)
     }

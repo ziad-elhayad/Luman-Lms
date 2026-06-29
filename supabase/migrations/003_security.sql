@@ -33,13 +33,36 @@ CREATE POLICY "Super admin can update all profiles" ON public.profiles
 CREATE POLICY "Super admin can delete profiles" ON public.profiles
   FOR DELETE USING (public.get_user_role() = 'super_admin');
 
-CREATE POLICY "Teachers can view student profiles" ON public.profiles
-  FOR SELECT USING (public.get_user_role() = 'teacher' AND role = 'student');
+-- Teacher-scoped student access: teachers can only view/update/delete their own students
+-- Note: We don't restrict INSERT because profiles are created by auth triggers
+-- The teacher_id is set by the app after user creation
 
-CREATE POLICY "Teachers can update student profiles" ON public.profiles
+CREATE POLICY "Teachers view own students" ON public.profiles
+  FOR SELECT USING (
+    public.get_user_role() = 'teacher' 
+    AND role = 'student' 
+    AND teacher_id = auth.uid()
+  );
+
+CREATE POLICY "Teachers update own students" ON public.profiles
   FOR UPDATE
-  USING    (public.get_user_role() = 'teacher' AND role = 'student')
-  WITH CHECK (public.get_user_role() = 'teacher' AND role = 'student');
+  USING (
+    public.get_user_role() = 'teacher' 
+    AND role = 'student' 
+    AND teacher_id = auth.uid()
+  )
+  WITH CHECK (
+    public.get_user_role() = 'teacher' 
+    AND role = 'student' 
+    AND teacher_id = auth.uid()
+  );
+
+CREATE POLICY "Teachers delete own students" ON public.profiles
+  FOR DELETE USING (
+    public.get_user_role() = 'teacher' 
+    AND role = 'student' 
+    AND teacher_id = auth.uid()
+  );
 
 -- ---------------------------------------------------------------------------
 -- courses
