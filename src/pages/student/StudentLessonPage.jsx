@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, FileText, Download, ClipboardList } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchSession, markSessionComplete } from '@/lib/api'
+import { LessonVideoPlayer } from '@/components/shared/LessonVideoPlayer'
+import { sessionToPlayerVideo } from '@/lib/sessions'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,9 +50,7 @@ export default function StudentLessonPage() {
 
   if (!session) return null
 
-  const videoEmbed = session.video_url?.includes('youtube')
-    ? session.video_url
-    : session.video_url
+  const playerVideo = sessionToPlayerVideo(session)
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -65,20 +65,8 @@ export default function StudentLessonPage() {
           <h1 className="text-2xl font-bold">{session.title}</h1>
         </div>
 
-        <div className="aspect-video overflow-hidden rounded-card bg-black">
-          {videoEmbed ? (
-            <iframe
-              src={videoEmbed}
-              title={session.title}
-              className="h-full w-full"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-white/60">
-              No video available
-            </div>
-          )}
+        <div className="overflow-hidden rounded-card">
+          <LessonVideoPlayer video={playerVideo} />
         </div>
 
         <Button onClick={handleComplete} disabled={completing} className="w-full sm:w-auto">

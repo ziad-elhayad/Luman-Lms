@@ -10,6 +10,7 @@ export const NAV_ITEMS = {
     { label: 'Assignments', path: '/teacher/assignments', icon: 'FileText' },
     { label: 'Grades', path: '/teacher/grades', icon: 'GraduationCap' },
     { label: 'Exams', path: '/teacher/exams', icon: 'ClipboardList' },
+    { label: 'Videos', path: '/teacher/videos', icon: 'Video' },
     { label: 'Students', path: '/teacher/students', icon: 'Users' },
     { label: 'Profile', path: '/teacher/profile', icon: 'User' },
     { label: 'Settings', path: '/teacher/settings', icon: 'Settings' },

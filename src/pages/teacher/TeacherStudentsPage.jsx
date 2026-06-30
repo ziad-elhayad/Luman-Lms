@@ -24,6 +24,9 @@ const EMPTY_FORM = {
   lastName: '',
   email: '',
   phone: '',
+  educationLevel: 'middle',
+  gradeYear: '1',
+  subjects: [],
   courseIds: [],
   password: '',
   confirmPassword: '',
@@ -132,6 +135,9 @@ export default function TeacherStudentsPage() {
       lastName: student.last_name || student.full_name?.split(' ').slice(1).join(' ') || '',
       email: student.email || '',
       phone: student.phone || '',
+      educationLevel: student.education_level || 'middle',
+      gradeYear: student.grade ? String(student.grade) : '1',
+      subjects: Array.isArray(student.subjects) ? student.subjects : [],
       courseIds: enrollments?.map((e) => e.course_id) || [],
       password: '',
       confirmPassword: '',
@@ -149,6 +155,9 @@ export default function TeacherStudentsPage() {
       newErrors.email = 'Email is invalid.'
     }
     if (!form.courseIds?.length) newErrors.courseIds = 'Assign at least one course.'
+    if (!form.educationLevel) newErrors.educationLevel = 'Education level is required.'
+    if (!form.gradeYear) newErrors.gradeYear = 'Grade year is required.'
+    if (!form.subjects?.length) newErrors.subjects = 'Select at least one subject.'
 
     if (!editing) {
       if (!form.password) {
@@ -186,6 +195,9 @@ export default function TeacherStudentsPage() {
           email: form.email.trim().toLowerCase(),
           phone: form.phone?.trim() || null,
           teacher_id: teacherId,
+          grade: Number(form.gradeYear),
+          education_level: form.educationLevel,
+          subjects: form.subjects || [],
         }
         const { error } = await supabase.from('profiles').update(updates).eq('id', editing.id)
         if (error) throw error
@@ -217,6 +229,9 @@ export default function TeacherStudentsPage() {
           fullName,
           phone: form.phone?.trim() || null,
           teacherId,
+          grade: Number(form.gradeYear),
+          educationLevel: form.educationLevel,
+          subjects: form.subjects || [],
         })
 
         await syncStudentEnrollments(user.id, form.courseIds)
@@ -399,6 +414,7 @@ export default function TeacherStudentsPage() {
             onChange={setForm}
             disabled={saving}
             teacherCourses={teacherCourses}
+            teacherProfile={teacherProfile}
           />
 
           <DialogFooter>

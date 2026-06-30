@@ -12,6 +12,7 @@ import {
   Sun,
   Sparkles,
   ClipboardList,
+  Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS } from '@/lib/navigation'
@@ -26,6 +27,7 @@ const ICONS = {
   GraduationCap,
   User,
   ClipboardList,
+  Video,
 }
 
 export function Sidebar({ role, collapsed, onToggle, mobileOpen, onMobileClose }) {

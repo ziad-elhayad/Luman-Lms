@@ -21,6 +21,7 @@ import TeacherGradesPage from '@/pages/teacher/TeacherGradesPage'
 import TeacherExamsPage from '@/pages/teacher/TeacherExamsPage'
 import TeacherExamBuilderPage from '@/pages/teacher/TeacherExamBuilderPage'
 import TeacherStudentsPage from '@/pages/teacher/TeacherStudentsPage'
+import TeacherVideosPage from '@/pages/teacher/TeacherVideosPage'
 import TeacherProfilePage from '@/pages/teacher/TeacherProfilePage'
 import TeacherSettingsPage from '@/pages/teacher/TeacherSettingsPage'
 
@@ -63,6 +64,7 @@ function App() {
                 <Route path="exams/new" element={<TeacherExamBuilderPage />} />
                 <Route path="exams/:examId/edit" element={<TeacherExamBuilderPage />} />
                 <Route path="students" element={<TeacherStudentsPage />} />
+                <Route path="videos" element={<TeacherVideosPage />} />
                 <Route path="profile" element={<TeacherProfilePage />} />
                 <Route path="settings" element={<TeacherSettingsPage />} />
               </Route>

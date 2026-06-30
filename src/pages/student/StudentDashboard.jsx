@@ -8,6 +8,7 @@ import { CourseCard } from '@/components/shared/CourseCard'
 import { StatCard } from '@/components/shared/StatCard'
 import { SkeletonLoader } from '@/components/shared/SkeletonLoader'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { StudentVideosSection } from '@/components/student/StudentVideosSection'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '@/lib/utils'
@@ -98,6 +99,8 @@ export default function StudentDashboard() {
           />
         )}
       </section>
+
+      <StudentVideosSection />
 
       <section>
         <h3 className="mb-4 text-lg font-semibold">Upcoming Assignments</h3>
