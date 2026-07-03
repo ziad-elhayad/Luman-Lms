@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { fetchTeacherCourses, syncStudentEnrollments } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Pagination } from '@/components/shared/Pagination'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Plus, Pencil, Trash2, UserCheck, UserX, Check, X } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -16,24 +16,24 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { createStudent } from '@/lib/createUser'
 import { StudentForm } from '@/components/shared/StudentForm'
+import {
+  EMPTY_STUDENT_FORM,
+  profileToStudentForm,
+  validateStudentForm,
+  studentFormToPayload,
+} from '@/lib/studentForm'
+import { approveStudent, rejectStudent, syncGradeEnrollments } from '@/lib/invitation'
+import { STUDENT_STATUS } from '@/lib/studentStatus'
+import { GRADE_YEARS } from '@/lib/videoConstants'
 
 const PAGE_SIZE = 10
 
-const EMPTY_FORM = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  educationLevel: 'middle',
-  gradeYear: '1',
-  subjects: [],
-  courseIds: [],
-  password: '',
-  confirmPassword: '',
-}
-
 function toggleDisabledLocal(list, id) {
   return list.map((s) => s.id === id ? { ...s, disabled: !s.disabled } : s)
+}
+
+function gradeLabel(grade) {
+  return GRADE_YEARS.find((g) => g.value === grade)?.label || `Grade ${grade}`
 }
 
 export default function TeacherStudentsPage() {
@@ -42,27 +42,41 @@ export default function TeacherStudentsPage() {
   const teacherId = teacherProfile?.id
 
   const [students, setStudents] = useState([])
-  const [teacherCourses, setTeacherCourses] = useState([])
-  const [enrollmentCounts, setEnrollmentCounts] = useState({})
+  const [pendingStudents, setPendingStudents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [pendingLoading, setPendingLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [page, setPage] = useState(1)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(EMPTY_STUDENT_FORM)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  const [actionId, setActionId] = useState(null)
 
   const [deleteId, setDeleteId] = useState(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [togglingIds, setTogglingIds] = useState(new Set())
 
-  const loadCourses = async () => {
+  const loadPending = async () => {
     if (!teacherId) return
-    const data = await fetchTeacherCourses(teacherId)
-    setTeacherCourses(data || [])
+    setPendingLoading(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'student')
+      .eq('status', STUDENT_STATUS.PENDING)
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      toast({ title: 'Error loading pending students', description: error.message, variant: 'danger' })
+    } else {
+      setPendingStudents(data || [])
+    }
+    setPendingLoading(false)
   }
 
   const load = async () => {
@@ -73,32 +87,19 @@ export default function TeacherStudentsPage() {
       .select('*')
       .eq('role', 'student')
       .eq('teacher_id', teacherId)
+      .or(`status.eq.${STUDENT_STATUS.ACTIVE},status.is.null`)
       .order('full_name')
 
     if (error) {
       toast({ title: 'Error loading students', description: error.message, variant: 'danger' })
     } else {
-      setStudents(data || [])
-      const studentIds = data?.map((s) => s.id) || []
-      if (studentIds.length) {
-        const { data: enrollments } = await supabase
-          .from('enrollments')
-          .select('student_id')
-          .in('student_id', studentIds)
-        const counts = {}
-        enrollments?.forEach((e) => {
-          counts[e.student_id] = (counts[e.student_id] || 0) + 1
-        })
-        setEnrollmentCounts(counts)
-      } else {
-        setEnrollmentCounts({})
-      }
+      setStudents((data || []).filter((s) => s.status !== STUDENT_STATUS.PENDING && s.status !== STUDENT_STATUS.REJECTED))
     }
     setLoading(false)
   }
 
   useEffect(() => {
-    loadCourses()
+    loadPending()
     load()
   }, [teacherId])
 
@@ -117,66 +118,24 @@ export default function TeacherStudentsPage() {
 
   const openCreate = () => {
     setEditing(null)
-    setForm(EMPTY_FORM)
+    setForm(EMPTY_STUDENT_FORM)
     setErrors({})
     setDialogOpen(true)
   }
 
-  const openEdit = async (student) => {
+  const openEdit = (student) => {
     setEditing(student)
     setErrors({})
-    const { data: enrollments } = await supabase
-      .from('enrollments')
-      .select('course_id')
-      .eq('student_id', student.id)
-
-    setForm({
-      firstName: student.first_name || student.full_name?.split(' ')[0] || '',
-      lastName: student.last_name || student.full_name?.split(' ').slice(1).join(' ') || '',
-      email: student.email || '',
-      phone: student.phone || '',
-      educationLevel: student.education_level || 'middle',
-      gradeYear: student.grade ? String(student.grade) : '1',
-      subjects: Array.isArray(student.subjects) ? student.subjects : [],
-      courseIds: enrollments?.map((e) => e.course_id) || [],
-      password: '',
-      confirmPassword: '',
-    })
+    setForm(profileToStudentForm(student))
     setDialogOpen(true)
   }
 
   const validateForm = () => {
-    const newErrors = {}
-    if (!form.firstName?.trim()) newErrors.firstName = 'First name is required.'
-    if (!form.lastName?.trim()) newErrors.lastName = 'Last name is required.'
-    if (!form.email?.trim()) {
-      newErrors.email = 'Email is required.'
-    } else if (!/\S+@\S+\.\S+/.test(form.email)) {
-      newErrors.email = 'Email is invalid.'
-    }
-    if (!form.courseIds?.length) newErrors.courseIds = 'Assign at least one course.'
-    if (!form.educationLevel) newErrors.educationLevel = 'Education level is required.'
-    if (!form.gradeYear) newErrors.gradeYear = 'Grade year is required.'
-    if (!form.subjects?.length) newErrors.subjects = 'Select at least one subject.'
-
-    if (!editing) {
-      if (!form.password) {
-        newErrors.password = 'Password is required.'
-      } else if (form.password.length < 6) {
-        newErrors.password = 'Password must be at least 6 characters.'
-      }
-      if (form.password !== form.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match.'
-      }
-    } else if (form.password) {
-      if (form.password.length < 6) {
-        newErrors.password = 'Password must be at least 6 characters.'
-      }
-      if (form.password !== form.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match.'
-      }
-    }
-
+    const newErrors = validateStudentForm(form, {
+      isEdit: Boolean(editing),
+      requirePassword: !editing,
+      requireCourses: false,
+    })
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -185,27 +144,27 @@ export default function TeacherStudentsPage() {
     if (!validateForm()) return
     setSaving(true)
     try {
-      const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`
+      const payload = studentFormToPayload(form)
 
       if (editing) {
         const updates = {
-          first_name: form.firstName.trim(),
-          last_name: form.lastName.trim(),
-          full_name: fullName,
-          email: form.email.trim().toLowerCase(),
-          phone: form.phone?.trim() || null,
+          first_name: payload.firstName,
+          last_name: payload.lastName,
+          full_name: payload.fullName,
+          email: payload.email,
+          phone: payload.phone,
           teacher_id: teacherId,
-          grade: Number(form.gradeYear),
-          education_level: form.educationLevel,
-          subjects: form.subjects || [],
+          grade: payload.grade,
+          education_level: payload.educationLevel,
+          subjects: payload.subjects,
         }
         const { error } = await supabase.from('profiles').update(updates).eq('id', editing.id)
         if (error) throw error
 
-        if (form.email.trim().toLowerCase() !== editing.email?.toLowerCase()) {
+        if (payload.email !== editing.email?.toLowerCase()) {
           const { error: authError } = await supabase.rpc('update_user_email_direct', {
             p_user_id: editing.id,
-            p_email: form.email.trim().toLowerCase(),
+            p_email: payload.email,
           })
           if (authError) console.warn('Could not sync auth email:', authError.message)
         }
@@ -218,23 +177,17 @@ export default function TeacherStudentsPage() {
           if (passwordError) console.warn('Could not sync auth password:', passwordError.message)
         }
 
-        await syncStudentEnrollments(editing.id, form.courseIds)
+        await syncGradeEnrollments(editing.id)
         toast({ title: 'Student updated', variant: 'success' })
       } else {
-        const user = await createStudent({
-          email: form.email.trim(),
-          password: form.password || 'password123',
-          firstName: form.firstName.trim(),
-          lastName: form.lastName.trim(),
-          fullName,
-          phone: form.phone?.trim() || null,
-          teacherId,
-          grade: Number(form.gradeYear),
-          educationLevel: form.educationLevel,
-          subjects: form.subjects || [],
-        })
+        const user = await createStudent({ ...payload, teacherId })
 
-        await syncStudentEnrollments(user.id, form.courseIds)
+        await supabase.from('student_teachers').upsert(
+          { student_id: user.id, teacher_id: teacherId },
+          { onConflict: 'student_id,teacher_id' },
+        )
+
+        await syncGradeEnrollments(user.id)
         toast({
           title: 'Student created',
           description: 'They can log in with the email and password you set.',
@@ -244,11 +197,39 @@ export default function TeacherStudentsPage() {
       setDialogOpen(false)
       setEditing(null)
       load()
+      loadPending()
     } catch (err) {
       const errorMsg = err?.message || err?.error_description || JSON.stringify(err)
       toast({ title: 'Error', description: errorMsg || 'An unknown error occurred', variant: 'danger' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleApprove = async (studentId) => {
+    setActionId(studentId)
+    try {
+      await approveStudent(studentId)
+      toast({ title: 'Student approved', description: 'They now have access to grade-matched courses.', variant: 'success' })
+      load()
+      loadPending()
+    } catch (err) {
+      toast({ title: 'Approval failed', description: err.message, variant: 'danger' })
+    } finally {
+      setActionId(null)
+    }
+  }
+
+  const handleReject = async (studentId) => {
+    setActionId(studentId)
+    try {
+      await rejectStudent(studentId)
+      toast({ title: 'Student rejected', variant: 'success' })
+      loadPending()
+    } catch (err) {
+      toast({ title: 'Rejection failed', description: err.message, variant: 'danger' })
+    } finally {
+      setActionId(null)
     }
   }
 
@@ -260,6 +241,7 @@ export default function TeacherStudentsPage() {
       toast({ title: 'Student deleted', variant: 'success' })
       setDeleteId(null)
       load()
+      loadPending()
     } catch (err) {
       const missingFn =
         err.code === 'PGRST202' ||
@@ -293,10 +275,7 @@ export default function TeacherStudentsPage() {
 
       if (error) throw error
       if (!updated || updated.length === 0) {
-        throw new Error(
-          'Permission denied: your account does not have permission to update student profiles. ' +
-          'Ask your admin to run supabase/patches/teacher_student_update.sql in the Supabase SQL Editor.'
-        )
+        throw new Error('Permission denied updating student profile.')
       }
 
       toast({
@@ -317,12 +296,7 @@ export default function TeacherStudentsPage() {
   const columns = [
     { key: 'name', label: 'Name', render: (r) => r.full_name },
     { key: 'email', label: 'Email', render: (r) => r.email || '—' },
-    {
-      key: 'courses', label: 'Courses',
-      render: (r) => (
-        <Badge variant="secondary">{enrollmentCounts[r.id] || 0} assigned</Badge>
-      ),
-    },
+    { key: 'grade', label: 'Grade', render: (r) => gradeLabel(r.grade) },
     {
       key: 'status', label: 'Status',
       render: (r) => (
@@ -360,49 +334,106 @@ export default function TeacherStudentsPage() {
     },
   ]
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Students</h2>
-          <p className="text-muted-foreground">Add students and assign your courses to them</p>
+  const pendingColumns = [
+    { key: 'name', label: 'Name', render: (r) => r.full_name },
+    { key: 'email', label: 'Email', render: (r) => r.email || '—' },
+    { key: 'grade', label: 'Grade', render: (r) => gradeLabel(r.grade) },
+    {
+      key: 'actions', label: 'Actions',
+      render: (r) => (
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            className="gap-1"
+            disabled={actionId === r.id}
+            onClick={() => handleApprove(r.id)}
+          >
+            <Check className="h-4 w-4" />
+            {actionId === r.id ? 'Approving...' : 'Approve'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            disabled={actionId === r.id}
+            onClick={() => handleReject(r.id)}
+          >
+            <X className="h-4 w-4" />
+            Reject
+          </Button>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="h-4 w-4" /> Add Student
-        </Button>
-      </div>
+      ),
+    },
+  ]
 
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <SearchInput
-          value={search}
-          onChange={(v) => { setSearch(v); setPage(1) }}
-          placeholder="Search students..."
-          className="sm:w-64"
+  return (
+    <div className="space-y-8">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Pending Students
+            {pendingStudents.length > 0 && (
+              <Badge variant="warning">{pendingStudents.length}</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={pendingColumns}
+            data={pendingStudents}
+            loading={pendingLoading}
+            emptyTitle="No pending students"
+            emptyDescription="New registrations via your invitation link will appear here for approval."
+          />
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Active Students</h2>
+            <p className="text-muted-foreground">
+              Students see courses automatically when their grade matches a course grade
+            </p>
+          </div>
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" /> Add Student
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <SearchInput
+            value={search}
+            onChange={(v) => { setSearch(v); setPage(1) }}
+            placeholder="Search students..."
+            className="sm:w-64"
+          />
+          <Select value={filter} onValueChange={(v) => { setFilter(v); setPage(1) }}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="disabled">Disabled</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <DataTable
+          columns={columns}
+          data={paginated}
+          loading={loading}
+          emptyTitle="No active students"
+          emptyDescription="Add students or approve pending registrations."
         />
-        <Select value={filter} onValueChange={(v) => { setFilter(v); setPage(1) }}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="disabled">Disabled</SelectItem>
-          </SelectContent>
-        </Select>
+        <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
       </div>
-
-      <DataTable
-        columns={columns}
-        data={paginated}
-        loading={loading}
-        emptyTitle="No students"
-        emptyDescription="Add students and assign courses to get started."
-      />
-      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
 
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open)
         if (!open) { setEditing(null) }
       }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Student' : 'Add Student'}</DialogTitle>
           </DialogHeader>
@@ -413,7 +444,6 @@ export default function TeacherStudentsPage() {
             isEdit={Boolean(editing)}
             onChange={setForm}
             disabled={saving}
-            teacherCourses={teacherCourses}
             teacherProfile={teacherProfile}
           />
 

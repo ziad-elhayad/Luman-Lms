@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { STUDENT_STATUS } from '@/lib/studentStatus'
 
 /**
  * Generic user creation function.
@@ -56,6 +57,8 @@ export async function createUserAccount({ email, password, role = 'student', pro
       education_level: profileData.education_level || null,
       secondary_track: profileData.secondary_track || null,
       teacher_id: profileData.teacher_id || null,
+      slug: profileData.slug || null,
+      status: profileData.status || null,
     }
     
     const { error: profileError } = await supabase
@@ -98,6 +101,7 @@ export async function createStudent({
       grade: grade ?? null,
       education_level: educationLevel || null,
       subjects: subjects || [],
+      status: STUDENT_STATUS.ACTIVE,
     },
   })
 }
@@ -105,7 +109,7 @@ export async function createStudent({
 /**
  * Create a teacher account
  */
-export async function createTeacher({ email, password, firstName, lastName, fullName, phone, educationLevel, secondaryTrack, subjects }) {
+export async function createTeacher({ email, password, firstName, lastName, fullName, phone, educationLevel, secondaryTrack, subjects, slug }) {
   return createUserAccount({
     email,
     password,
@@ -118,16 +122,93 @@ export async function createTeacher({ email, password, firstName, lastName, full
       education_level: educationLevel,
       secondary_track: secondaryTrack,
       subjects,
+      slug,
     },
   })
 }
 
 /**
+ * Register a student via teacher invitation (self-service).
+ * Creates auth account and profile; caller must join teacher after session is established.
+ */
+export async function registerStudent({
+  email,
+  password,
+  firstName,
+  lastName,
+  fullName,
+  phone,
+  grade,
+  educationLevel,
+  subjects,
+}) {
+  const resolvedFullName = fullName || `${firstName || ''} ${lastName || ''}`.trim()
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        role: 'student',
+        full_name: resolvedFullName,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        phone: phone || null,
+      },
+    },
+  })
+
+  if (error) {
+    const err = new Error(error?.message || 'Registration failed')
+    err.originalError = error
+    throw err
+  }
+
+  if (!data.user?.id) {
+    throw new Error('Registration failed — no user returned')
+  }
+
+  if (data.session) {
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    })
+  } else {
+    const err = new Error(
+      'Please confirm your email before continuing, or disable email confirmation in Supabase for development.',
+    )
+    err.code = 'email_confirmation_required'
+    throw err
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .upsert({
+      id: data.user.id,
+      email: email.toLowerCase(),
+      role: 'student',
+      full_name: resolvedFullName,
+      first_name: firstName || null,
+      last_name: lastName || null,
+      phone: phone || null,
+      grade: grade ?? null,
+      education_level: educationLevel || null,
+      subjects: subjects || [],
+      status: STUDENT_STATUS.PENDING,
+    }, { onConflict: 'id' })
+
+  if (profileError) {
+    throw new Error(`Failed to create profile: ${profileError.message}`)
+  }
+
+  return data.user
+}
+
+/**
  * Update teacher account (calls RPC function if available)
  */
-export async function updateTeacher(userId, { firstName, lastName, email, phone, educationLevel, secondaryTrack, subjects, password }) {
+export async function updateTeacher(userId, { firstName, lastName, email, phone, educationLevel, secondaryTrack, subjects, slug, password }) {
   try {
-    // Try to use the RPC function if it exists
     const { error } = await supabase.rpc('update_teacher_account', {
       p_user_id: userId,
       p_first_name: firstName?.trim() || null,
@@ -137,6 +218,7 @@ export async function updateTeacher(userId, { firstName, lastName, email, phone,
       p_education_level: educationLevel || null,
       p_secondary_track: secondaryTrack || null,
       p_subjects: subjects || [],
+      p_slug: slug?.trim() || null,
       p_password: password?.trim() || null,
     })
     if (error) throw error
@@ -151,6 +233,7 @@ export async function updateTeacher(userId, { firstName, lastName, email, phone,
       education_level: educationLevel || null,
       secondary_track: secondaryTrack || null,
       subjects: subjects || [],
+      slug: slug?.trim() || null,
     }
     const { error: updateError } = await supabase
       .from('profiles')

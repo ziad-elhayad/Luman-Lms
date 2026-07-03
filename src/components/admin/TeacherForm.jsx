@@ -11,6 +11,7 @@ import {
   needsSecondaryTrack,
 } from '@/lib/teacherSubjects'
 import { applyTeacherFormChange } from '@/lib/teacherForm'
+import { InvitationLinkPreview } from '@/components/admin/InvitationLinkPreview'
 
 function Field({ id, label, error, children, hint }) {
   return (
@@ -58,6 +59,25 @@ export function TeacherForm({ form, errors, isEdit, onChange, disabled }) {
       <Field id="phone" label="Phone" error={errors.phone}>
         <Input id="phone" type="tel" value={form.phone} onChange={set('phone')} disabled={disabled} placeholder="+20 100 000 0000" autoComplete="tel" />
       </Field>
+
+      <Field
+        id="slug"
+        label="Teacher Slug"
+        error={errors.slug}
+        hint="Lowercase letters, numbers, and hyphens only (e.g. ahmed-math)"
+      >
+        <Input
+          id="slug"
+          value={form.slug}
+          onChange={set('slug')}
+          disabled={disabled}
+          placeholder="ahmed-math"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </Field>
+
+      <InvitationLinkPreview slug={form.slug} />
 
       <Field id="educationLevel" label="Education level" error={errors.educationLevel}>
         <Select

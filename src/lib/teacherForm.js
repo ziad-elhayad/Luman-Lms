@@ -3,10 +3,12 @@ import {
   needsSecondaryTrack,
   pruneSubjects,
 } from '@/lib/teacherSubjects'
+import { normalizeTeacherSlug, validateTeacherSlug } from '@/lib/teacherSlug'
 
 export const EMPTY_TEACHER_FORM = {
   firstName: '',
   lastName: '',
+  slug: '',
   email: '',
   phone: '',
   password: '',
@@ -32,6 +34,7 @@ export function profileToTeacherForm(profile) {
   return {
     firstName,
     lastName,
+    slug: profile?.slug || '',
     email: profile?.email || '',
     phone: profile?.phone || '',
     password: '',
@@ -44,6 +47,10 @@ export function profileToTeacherForm(profile) {
 
 export function applyTeacherFormChange(form, patch) {
   const next = { ...form, ...patch }
+
+  if ('slug' in patch) {
+    next.slug = normalizeTeacherSlug(patch.slug)
+  }
 
   if ('educationLevel' in patch) {
     if (!needsSecondaryTrack(next.educationLevel)) {
@@ -64,6 +71,9 @@ export function validateTeacherForm(form, isEdit) {
 
   if (!form.firstName.trim()) errors.firstName = 'First name is required'
   if (!form.lastName.trim()) errors.lastName = 'Last name is required'
+
+  const slugError = validateTeacherSlug(form.slug)
+  if (slugError) errors.slug = slugError
 
   if (!form.email.trim()) {
     errors.email = 'Email is required'

@@ -3,9 +3,12 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastContextProvider } from '@/contexts/ToastContext'
 import { ProtectedRoute, PublicRoute } from '@/components/auth/ProtectedRoute'
+import { StudentAccessGuard } from '@/components/auth/StudentAccessGuard'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 
 import LoginPage from '@/pages/auth/LoginPage'
+import RegisterPage from '@/pages/auth/RegisterPage'
+import JoinPage from '@/pages/auth/JoinPage'
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage'
 
 import AdminDashboard from '@/pages/admin/AdminDashboard'
@@ -36,6 +39,8 @@ import StudentExamResultPage from '@/pages/student/StudentExamResultPage'
 import StudentAssignmentsPage from '@/pages/student/StudentAssignmentsPage'
 import StudentProfilePage from '@/pages/student/StudentProfilePage'
 import StudentSettingsPage from '@/pages/student/StudentSettingsPage'
+import PendingApprovalPage from '@/pages/student/PendingApprovalPage'
+import RejectedPage from '@/pages/student/RejectedPage'
 
 function App() {
   return (
@@ -44,6 +49,8 @@ function App() {
         <ToastContextProvider>
           <AuthProvider>
             <Routes>
+              <Route path="/join/:teacherSlug" element={<JoinPage />} />
+              <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
               <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
               <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
 
@@ -69,7 +76,10 @@ function App() {
                 <Route path="settings" element={<TeacherSettingsPage />} />
               </Route>
 
-              <Route path="/student" element={<ProtectedRoute allowedRoles={['student']}><DashboardLayout /></ProtectedRoute>}>
+              <Route path="/student/pending" element={<ProtectedRoute allowedRoles={['student']}><PendingApprovalPage /></ProtectedRoute>} />
+              <Route path="/student/rejected" element={<ProtectedRoute allowedRoles={['student']}><RejectedPage /></ProtectedRoute>} />
+
+              <Route path="/student" element={<ProtectedRoute allowedRoles={['student']}><StudentAccessGuard><DashboardLayout /></StudentAccessGuard></ProtectedRoute>}>
                 <Route index element={<StudentDashboard />} />
                 <Route path="courses" element={<StudentCoursesPage />} />
                 <Route path="courses/:courseId" element={<StudentCourseDetailPage />} />

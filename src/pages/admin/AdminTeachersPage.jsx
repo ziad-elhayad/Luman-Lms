@@ -21,6 +21,9 @@ import {
 } from '@/lib/teacherForm'
 import { formatSubjectsList, EDUCATION_LEVELS } from '@/lib/teacherSubjects'
 import { createTeacher, updateTeacher } from '@/lib/createUser'
+import { isTeacherSlugAvailable } from '@/lib/invitation'
+import { normalizeTeacherSlug } from '@/lib/teacherSlug'
+import { TeacherSuccessDialog } from '@/components/admin/TeacherSuccessDialog'
 
 const PAGE_SIZE = 10
 
@@ -39,6 +42,7 @@ export default function AdminTeachersPage() {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
+  const [successDialog, setSuccessDialog] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -72,7 +76,7 @@ export default function AdminTeachersPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, full_name, email, phone, education_level, secondary_track, subjects')
+      .select('id, first_name, last_name, full_name, email, phone, education_level, secondary_track, subjects, slug')
       .eq('id', teacher.id)
       .single()
 
@@ -104,6 +108,14 @@ export default function AdminTeachersPage() {
 
     setSaving(true)
     try {
+      const slug = normalizeTeacherSlug(form.slug)
+      const available = await isTeacherSlugAvailable(slug, isEdit ? editing.id : null)
+      if (!available) {
+        setErrors({ slug: 'This slug is already in use. Please choose another one.' })
+        setSaving(false)
+        return
+      }
+
       if (isEdit) {
         await updateTeacher(editing.id, {
           firstName: form.firstName,
@@ -113,9 +125,14 @@ export default function AdminTeachersPage() {
           educationLevel: form.educationLevel,
           secondaryTrack: form.secondaryTrack,
           subjects: form.subjects,
+          slug,
           password: form.password || null,
         })
         toast({ title: 'Teacher updated', variant: 'success' })
+        setDialogOpen(false)
+        setEditing(null)
+        setForm(EMPTY_TEACHER_FORM)
+        load()
       } else {
         const fullName = `${form.firstName} ${form.lastName}`.trim()
         await createTeacher({
@@ -128,19 +145,24 @@ export default function AdminTeachersPage() {
           educationLevel: form.educationLevel,
           secondaryTrack: form.secondaryTrack,
           subjects: form.subjects,
+          slug,
         })
-        toast({
-          title: 'Teacher created',
-          description: 'They can log in with the email and password you set.',
-          variant: 'success',
-        })
+        setDialogOpen(false)
+        setEditing(null)
+        setForm(EMPTY_TEACHER_FORM)
+        setSuccessDialog({ teacherName: fullName, slug })
+        load()
       }
-      setDialogOpen(false)
-      setEditing(null)
-      setForm(EMPTY_TEACHER_FORM)
-      load()
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'danger' })
+      const isSlugConflict =
+        err.message?.includes('slug is already in use') ||
+        err.message?.includes('duplicate key') ||
+        err.code === '23505'
+      if (isSlugConflict) {
+        setErrors({ slug: 'This slug is already in use. Please choose another one.' })
+      } else {
+        toast({ title: 'Error', description: err.message, variant: 'danger' })
+      }
     } finally {
       setSaving(false)
     }
@@ -182,6 +204,7 @@ export default function AdminTeachersPage() {
 
   const columns = [
     { key: 'name', label: 'Name', render: (r) => teacherDisplayName(r) },
+    { key: 'slug', label: 'Slug', render: (r) => r.slug ? <code className="text-xs">{r.slug}</code> : '—' },
     { key: 'email', label: 'Email', render: (r) => r.email || '—' },
     { key: 'phone', label: 'Phone', render: (r) => r.phone || '—' },
     {
@@ -288,6 +311,13 @@ export default function AdminTeachersPage() {
         confirmLabel={teachers.find((t) => t.id === disableId)?.disabled ? 'Enable' : 'Disable'}
         variant="default"
         onConfirm={handleDisable}
+      />
+
+      <TeacherSuccessDialog
+        open={!!successDialog}
+        onOpenChange={(open) => { if (!open) setSuccessDialog(null) }}
+        teacherName={successDialog?.teacherName}
+        slug={successDialog?.slug}
       />
     </div>
   )

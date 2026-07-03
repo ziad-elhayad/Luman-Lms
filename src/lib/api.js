@@ -1,16 +1,29 @@
 import { supabase } from '@/lib/supabase'
+import { STUDENT_STATUS } from '@/lib/studentStatus'
+import { syncGradeEnrollments } from '@/lib/invitation'
 
 export async function fetchStudentCourses(studentId) {
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('grade, teacher_id, status, role')
+    .eq('id', studentId)
+    .maybeSingle()
+
+  if (profileError) throw profileError
+  if (!profile || profile.role !== 'student' || profile.status !== STUDENT_STATUS.ACTIVE) {
+    return []
+  }
+  if (profile.grade == null || !profile.teacher_id) return []
+
+  await syncGradeEnrollments(studentId).catch(() => {})
+
   const { data: enrollments, error: enrError } = await supabase
     .from('enrollments')
     .select('course_id, progress')
     .eq('student_id', studentId)
 
   if (enrError) throw enrError
-  if (!enrollments?.length) return []
-
-  const courseIds = enrollments.map((e) => e.course_id)
-  const progressMap = Object.fromEntries(enrollments.map((e) => [e.course_id, e.progress]))
+  const progressMap = Object.fromEntries((enrollments || []).map((e) => [e.course_id, e.progress]))
 
   const { data, error } = await supabase
     .from('courses')
@@ -20,7 +33,8 @@ export async function fetchStudentCourses(studentId) {
       sessions(count),
       enrollments(count)
     `)
-    .in('id', courseIds)
+    .eq('teacher_id', profile.teacher_id)
+    .eq('grade', profile.grade)
     .order('title')
 
   if (error) throw error
@@ -94,7 +108,7 @@ export async function fetchCourseWithDetails(courseId, studentId) {
       .select('*')
       .eq('student_id', studentId)
       .eq('course_id', courseId)
-      .single()
+      .maybeSingle()
     enrollment = enr
 
     const { data: progress } = await supabase

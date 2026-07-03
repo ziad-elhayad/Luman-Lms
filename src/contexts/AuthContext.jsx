@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { studentDashboardRoute } from '@/lib/studentStatus'
 
 const AuthContext = createContext(null)
 
@@ -7,6 +8,40 @@ const ROLE_ROUTES = {
   super_admin: '/admin',
   teacher: '/teacher',
   student: '/student',
+}
+
+const VALID_ROLES = ['super_admin', 'teacher', 'student']
+
+async function bootstrapProfile(userId) {
+  const { data: { user: authUser }, error: userError } = await supabase.auth.getUser()
+  if (userError || !authUser || authUser.id !== userId) return null
+
+  const meta = authUser.user_metadata || {}
+  const role = VALID_ROLES.includes(meta.role) ? meta.role : 'student'
+  const fullName = meta.full_name || authUser.email?.split('@')[0] || 'User'
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      email: authUser.email?.toLowerCase() || null,
+      role,
+      full_name: fullName,
+    }, { onConflict: 'id' })
+    .select()
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error bootstrapping profile:', error)
+    const { data: retry } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle()
+    return retry
+  }
+
+  return data
 }
 
 export function AuthProvider({ children }) {
@@ -19,11 +54,17 @@ export function AuthProvider({ children }) {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error fetching profile:', error)
       return null
+    }
+
+    let profileData = data
+    if (!profileData) {
+      profileData = await bootstrapProfile(userId)
+      if (!profileData) return null
     }
 
     const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -31,10 +72,9 @@ export function AuthProvider({ children }) {
     let needsUpdate = false
     const updates = {}
 
-    // Sync role from auth metadata if profile has wrong/default role
-    if (meta.role && meta.role !== data.role && ['super_admin', 'teacher', 'student'].includes(meta.role)) {
+    if (meta.role && meta.role !== profileData.role && VALID_ROLES.includes(meta.role)) {
       updates.role = meta.role
-      data.role = meta.role
+      profileData.role = meta.role
       needsUpdate = true
     }
 
@@ -42,7 +82,7 @@ export function AuthProvider({ children }) {
       await supabase.from('profiles').update(updates).eq('id', userId)
     }
 
-    return data
+    return profileData
   }, [])
 
   useEffect(() => {
@@ -77,8 +117,8 @@ export function AuthProvider({ children }) {
     if (error) throw error
     const p = await fetchProfile(data.user.id)
 
-    // Block disabled accounts — sign them out immediately so the session is not kept
-    if (p?.disabled) {
+    // Block disabled accounts (rejected students can still sign in to see rejection page)
+    if (p?.disabled && p?.status !== 'rejected') {
       await supabase.auth.signOut()
       throw new Error('Your account has been disabled. Please contact your teacher or administrator.')
     }
@@ -102,6 +142,7 @@ export function AuthProvider({ children }) {
 
   const getDashboardRoute = () => {
     if (!profile?.role) return '/login'
+    if (profile.role === 'student') return studentDashboardRoute(profile)
     return ROLE_ROUTES[profile.role] || '/login'
   }
 

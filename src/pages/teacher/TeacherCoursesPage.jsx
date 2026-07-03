@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchTeacherCourses } from '@/lib/api'
+import { syncTeacherGradeEnrollments } from '@/lib/invitation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { CourseCard } from '@/components/shared/CourseCard'
@@ -15,6 +16,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { GRADE_YEARS } from '@/lib/videoConstants'
 import { BookOpen } from 'lucide-react'
 import { useToast } from '@/contexts/ToastContext'
 
@@ -26,7 +29,7 @@ export default function TeacherCoursesPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteId, setDeleteId] = useState(null)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ title: '', description: '' })
+  const [form, setForm] = useState({ title: '', description: '', grade: '1' })
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
@@ -44,7 +47,7 @@ export default function TeacherCoursesPage() {
 
   const openCreate = () => {
     setEditing(null)
-    setForm({ title: '', description: '' })
+    setForm({ title: '', description: '', grade: '1' })
     setDialogOpen(true)
   }
 
@@ -53,6 +56,7 @@ export default function TeacherCoursesPage() {
     setForm({
       title: course.title,
       description: course.description || '',
+      grade: course.grade ? String(course.grade) : '1',
     })
     setDialogOpen(true)
   }
@@ -62,20 +66,27 @@ export default function TeacherCoursesPage() {
       toast({ title: 'Title required', description: 'Enter a course title.', variant: 'danger' })
       return
     }
+    if (!form.grade) {
+      toast({ title: 'Grade required', description: 'Select a grade level for this course.', variant: 'danger' })
+      return
+    }
     setSaving(true)
     try {
       const payload = {
         title: form.title.trim(),
         description: form.description?.trim() || null,
         teacher_id: user.id,
+        grade: Number(form.grade),
       }
       if (editing) {
         const { error } = await supabase.from('courses').update(payload).eq('id', editing.id)
         if (error) throw error
+        await syncTeacherGradeEnrollments(user.id, Number(form.grade))
         toast({ title: 'Course updated', variant: 'success' })
       } else {
         const { error } = await supabase.from('courses').insert(payload)
         if (error) throw error
+        await syncTeacherGradeEnrollments(user.id, Number(form.grade))
         toast({ title: 'Course created', variant: 'success' })
       }
       setDialogOpen(false)
@@ -104,7 +115,7 @@ export default function TeacherCoursesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">My Courses</h2>
-          <p className="text-muted-foreground">Create courses, then assign them when you add students</p>
+          <p className="text-muted-foreground">Create courses by grade — students see matching courses automatically</p>
         </div>
         <Button onClick={openCreate}><Plus className="h-4 w-4" /> New Course</Button>
       </div>
@@ -153,6 +164,17 @@ export default function TeacherCoursesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2"><Label>Title</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Introduction to Physics" /></div>
+            <div className="space-y-2">
+              <Label>Grade level</Label>
+              <Select value={form.grade} onValueChange={(v) => setForm({ ...form, grade: v })}>
+                <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
+                <SelectContent>
+                  {GRADE_YEARS.map((g) => (
+                    <SelectItem key={g.value} value={String(g.value)}>{g.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2"><Label>Description</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What will students learn?" /></div>
           </div>
           <DialogFooter>

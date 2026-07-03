@@ -1,6 +1,16 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+
+function SignOutButton() {
+  const { signOut } = useAuth()
+  return (
+    <Button variant="outline" onClick={() => signOut()}>
+      Sign out
+    </Button>
+  )
+}
 
 export function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, loading, profile } = useAuth()
@@ -26,10 +36,12 @@ export function ProtectedRoute({ children, allowedRoles }) {
   if (!profile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
-        <div className="w-full max-w-md space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-3/4" />
+        <div className="max-w-md text-center space-y-4">
+          <h1 className="text-xl font-semibold text-foreground">Profile not found</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account exists but has no profile. Try signing out and back in, or contact support.
+          </p>
+          <SignOutButton />
         </div>
       </div>
     )
@@ -55,11 +67,11 @@ export function ProtectedRoute({ children, allowedRoles }) {
 }
 
 export function PublicRoute({ children }) {
-  const { isAuthenticated, loading, getDashboardRoute } = useAuth()
+  const { isAuthenticated, loading, profile, getDashboardRoute } = useAuth()
 
   if (loading) return null
 
-  if (isAuthenticated) {
+  if (isAuthenticated && profile) {
     return <Navigate to={getDashboardRoute()} replace />
   }
 
